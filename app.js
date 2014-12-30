@@ -8,10 +8,9 @@ var FacebookStrategy = require('passport-facebook').Strategy;
 var searchify = require('./searchify.js');
 var async = require('async');
 
-var FACEBOOK_APP_ID = "751077541639858";
-var FACEBOOK_APP_SECRET = "cc879b234c12d49415360cfdcfdc60d9";
+var local = require('./data/local.js');
 
-var admin = '10152960524402392';
+var admin = local.facebook.admin;
 
 RegExp.quote = require('regexp-quote');
 
@@ -24,9 +23,9 @@ passport.deserializeUser(function(obj, done) {
 });
 
 passport.use(new FacebookStrategy({
-    clientID: FACEBOOK_APP_ID,
-    clientSecret: FACEBOOK_APP_SECRET,
-    callbackURL: "http://test.salsadelphia.com:3000/auth/facebook/callback"
+    clientID: local.facebook.appId,
+    clientSecret: local.facebook.appSecret,
+    callbackURL: local.facebook.callback
   },
   function(accessToken, refreshToken, profile, done) {
     // asynchronous verification, for effect...

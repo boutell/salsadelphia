@@ -1,0 +1,13 @@
+{% for event in events %}
+  <article>
+    <div class="date">
+      <span class="weekday">{{ moment(event.when, 'ddd') }}</span>
+      <span class="day">{{ moment(event.when, 'DD') }}</span>
+      <span class="month">{{ moment(event.when, 'MMM') }}</span>
+    </div>
+    <h4 class="name">{{ event.name | e }} <a class="button edit" href="/edit?id={{ event._id }}">Edit</a></h3>
+    <h4 class="venue">{{ event.venue | e }} </h4>
+    <h5 class="address"><a href="https://www.google.com/maps/place/{{ event.address | urlencode | e }}">{{ event.address | e }}</a></h5>
+    <div class="details">{{ event.details | e | nlbr }}</div>
+  </article>
+{% endfor %}

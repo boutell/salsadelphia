@@ -1,0 +1,121 @@
+{% extends "layout.html" %}
+
+{# Display original value for comparison #}
+{%- macro original(event, field, type) -%}
+  {%- if event.original -%}
+    <div class="original {{ type }}">
+      {% if event.type == 'boolean' %}
+        {% if event.original[field] %}Yes{% else %}No{% endif %}
+      {% elif (event.type == 'textarea') %}
+        {{ event.original[field] | e | nlbr }}
+      {% else %}
+        {{ event.original[field] | e }}
+      {% endif %}
+    </div>
+  {%- endif -%}
+{% endmacro %}
+
+{% block main %}
+
+{% if not event._id %}
+<h3>Add a new event</h3>
+{% endif %}
+
+{% if moderating %}
+  <h4>editors (newest last)</h4>
+  <ul>
+    {% for editor in event.editors %}
+      <li><a href="{{ editor.profileUrl | e }}">{{ editor.displayName | e}}</a></li>
+    {% endfor %}
+  </ul>
+{% endif %}
+
+{% if event.remove %}
+  <h4>A contributor has asked you to remove this listing.</h4>
+{% endif %}
+
+<form class="new-event edit-event" method="POST" action="{{ action }}">
+  <fieldset>
+    <label>Event Name</label><input name="name" value="{{ event.name | e }}" />{{ original(event, 'name') }}
+  </fieldset>
+  <fieldset>
+    <label>Venue Name</label><input name="venue" value="{{ event.venue | e }}" />{{ original(event, 'venue') }}
+  </fieldset>
+  <fieldset>
+    <label>Venue Address</label><input name="address" value="{{ event.address | e }}"/>{{ original(event, 'address') }}
+  </fieldset>
+  <fieldset>
+    <label>Event Date</label>
+    <select name="date">
+      {% if event.when %}
+        <option value="{{ event.date }}">{{ moment(event.when, 'ddd MMM Do') }}</option>
+      {% else %}
+        <option value="">CHOOSE ONE</option>
+      {% endif %}
+      {% for d in dates %}
+        <option value="{{ moment(d, 'YYYY-MM-DD') }}">{{ moment(d, 'ddd MMM Do') }}</option>
+      {% endfor %}
+    </select>{{ original(event, 'date') }}
+  </fieldset>
+  <fieldset>
+    <label>Event Time</label>
+    <select name="time">
+      {% if event.when %}
+          <option value="{{ event.time }}">{{ moment(event.when, 'h:mma') }}</option>
+      {% else %}
+        <option value="">CHOOSE ONE</option>
+      {% endif %}
+      {% for d in times %}
+        <option value="{{ moment(d, 'h:mma') }}">{{ moment(d, 'h:mma') }}</option>
+      {% endfor %}
+    </select>{{ original(event, 'time') }}
+  </fieldset>
+  <fieldset class="repeat">
+    <label>Repeat?</label>
+    <select name="repeat">
+      <option value="" {% if not event.repeat %}selected{% endif %}>No</option>
+      <option value="1" {% if event.repeat %}selected{% endif %}>Yes</option>
+    </select>
+    {{ original(event, 'repeat', 'boolean') }}
+    <div class="repeat-calendar">
+      <p class="help"><strong>Choose days of the month</strong></p>
+      <p class="help">If your event is every Tuesday, check all the boxes in the "Tue" column.</p>
+      <p class="help">If your event is every third Saturday, check just the box in the third row.</p>
+      <p class="help">You get the idea.</p>
+      <table>
+        <tr>
+          <th>Week</th>
+          {% for i in range(0, 7) %}
+            {% set day = weekdays[i] %}
+            <th class="weekday" data-weekday="{{ i }}">{{ day }}</th>
+          {% endfor %}
+        </tr>
+        {% for i in range(0, 6) %}
+          <tr>
+            <th>{% if (i == 5) %}Last{% else %}{{ i + 1 }}{% endif %}</th>
+            {% for j in range (0, 7) %}
+              <td><input type="checkbox" data-weekday="{{ j }}" name="days[w{{ i }}][d{{ j }}]" {% if event.days[i][j] %}checked{% endif %} /></td>
+            {% endfor %}
+          </tr>
+        {% endfor %}
+      </table>
+    </div>
+  </fieldset>
+  <fieldset>
+    <label>Details</label>
+    <p class="help"><strong>Cover charge?</strong> Who's teaching? Who's DJing?</p>
+    <textarea name="details">{{ event.details | e }}</textarea>
+    {{ original(event, 'details', 'textarea') }}
+  </fieldset>
+  <fieldset>
+    <a href="#" class="button save">Save Changes</a>
+    <a href="/" class="button cancel">never mind</a>
+    {% if moderating %}
+      <a href="#" class="button reject">Reject Changes</a>
+    {% endif %}
+    {% if event._id %}
+      <a href="#" class="button remove">Remove Listing</a>
+    {% endif %}
+  </fieldset>
+</form>
+{% endblock %}

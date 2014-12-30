@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Salsadelphia</title>
+  <link rel="stylesheet" href="//ajax.googleapis.com/ajax/libs/jqueryui/1.11.2/themes/smoothness/jquery-ui.css" />
+  <link rel="stylesheet" type="text/css" href="/css/site.css">
+  <link href='http://fonts.googleapis.com/css?family=Fjalla+One' rel='stylesheet' type='text/css'>
+</head>
+<body {% if user %}class="logged-in"{% endif %}>
+  <div class="layout">
+    <h1>{% block headingButton %}{% endblock %}<a href="/">Salsadelphia</a></h1>
+    {% if message and message.length %}
+      <h2>{{ message | e }}</h2>
+    {% endif %}
+    <main>
+      {% block main %}{% endblock %}
+    </main>
+    <footer>
+      Salsadelphia is maintained by volunteers. Got questions about the site? Contact <a href="mailto:tommybgoode@gmail.com">Tom Boutell</a>. Got questions about the venues? Call them. This is a volunteer-maintained site, so please take advantage of the "edit" and "add event" buttons. ¡Baila salsa!
+    </footer>
+    <script src="//ajax.googleapis.com/ajax/libs/jquery/1.11.2/jquery.min.js"></script>
+    <script src="//ajax.googleapis.com/ajax/libs/jqueryui/1.11.2/jquery-ui.min.js"></script>
+    <script src="/js/site.js"></script>
+    <script type="text/javascript">
+    </script>
+  </div>
+</body>
+</html>

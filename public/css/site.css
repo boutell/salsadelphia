@@ -1,0 +1,306 @@
+/* START RESET */
+
+html, body, div, span, applet, object, iframe,
+h1, h2, h3, h4, h5, h6, p, blockquote, pre,
+a, abbr, acronym, address, big, cite, code,
+del, dfn, em, img, ins, kbd, q, s, samp,
+small, strike, strong, sub, sup, tt, var,
+b, u, i, center,
+dl, dt, dd, ol, ul, li,
+fieldset, form, label, legend,
+table, caption, tbody, tfoot, thead, tr, th, td,
+article, aside, canvas, details, embed, 
+figure, figcaption, footer, header, hgroup, 
+menu, nav, output, ruby, section, summary,
+time, mark, audio, video {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  font-size: 100%;
+  font: inherit;
+  vertical-align: baseline;
+}
+/* HTML5 display-role reset for older browsers */
+article, aside, details, figcaption, figure,
+footer, header, hgroup, menu, nav, section {
+  display: block;
+}
+body {
+  line-height: 1;
+}
+ol, ul {
+  list-style: none;
+}
+blockquote, q {
+  quotes: none;
+}
+blockquote:before, blockquote:after,
+q:before, q:after {
+  content: '';
+  content: none;
+}
+table {
+  border-collapse: collapse;
+  border-spacing: 0;
+}
+
+/* END RESET */
+
+body {
+  background-color: black;
+  font-family: Helvetica;
+}
+
+.layout {
+  background-color: white;
+  color: #060;
+  width: 800px;
+  margin: auto;
+  padding: 1em;
+}
+
+h1,h2,h3,h4,h5 {
+  padding-top: 0;
+  padding-bottom: 1em;
+}
+
+h1 {
+  font-size: 200%;
+  font-family: 'Fjalla One', sans-serif;
+  text-transform: uppercase;
+  background-color: #f00;
+  color: white;
+  padding: 4px;
+  margin-bottom: 1em;
+}
+
+h2 {
+  font-size: 175%;
+}
+
+h3 {
+  font-size: 150%;
+}
+
+h4 {
+  font-size: 125%;
+}
+
+h5 {
+  font-size: 110%;
+}
+
+form.new-event {
+}
+
+fieldset {
+  padding: 10px;
+}
+
+label, input, textarea, select {
+  vertical-align: middle;
+  font-family: helvetica;
+}
+
+label {
+  display: inline-block;
+  width: 180px;
+}
+
+input, textarea, select {
+  color: #060;
+  border: 1px solid #060;
+  width: 300px;
+  padding: 4px;
+  margin: 0;
+  font-size: 125%;
+}
+
+textarea {
+  width: 100%;
+  height: 5em;
+  /* Why is this necessary to line up with the input elements? */
+  margin-left: -4px;
+}
+
+h1 a {
+  text-decoration: none;
+  color: inherit;
+}
+
+a {
+  text-decoration: none;
+  color: #008;
+}
+
+.button {
+  font-family: 'Fjalla One', sans-serif;
+  text-transform: uppercase;
+  font-size: inherit;
+  font-size: 150%;
+  margin: 0;
+  padding: 6px;
+  border: 0;
+  color: white;
+  background-color: #24a;
+  border: 1px solid #ddf;
+  margin-right: 10px;
+  display: inline-block;
+  text-decoration: none;
+}
+
+h1 .button {
+  float: right;
+  display: block;
+  font-size: 60%;
+  background-color: transparent;
+  border: none;
+}
+
+h4 .button {
+  font-size: 75%;
+}
+
+.button.new-event {
+  text-align: center;
+  margin-bottom: 1em;
+}
+
+article {
+  padding-bottom: 1em;
+  border-bottom: 1px dotted #ccc;
+  margin-bottom: 1.5em;
+}
+
+.original {
+  display: inline-block;
+  padding-left: 10px;
+  font-style: italic;
+}
+
+.original.textarea {
+  display: block;
+  padding-left: 0;
+  padding-top: 10px;
+}
+
+.button.remove {
+  margin-left: 50px;
+}
+
+.repeat-calendar {
+  margin-left: 180px;
+  margin-top: 1em;
+  display: none;
+}
+
+.repeat-calendar td, th {
+  padding: 5px;
+  border-bottom: 1px dotted #060;
+  width: 3em;
+  text-align: center;
+}
+
+.repeat-calendar td input {
+  width: auto;
+}
+
+.help {
+  margin-top: 1em;
+  margin-bottom: 1em;
+}
+
+strong {
+  font-weight: bold;
+}
+
+.date {
+  font-family: 'Fjalla One', sans-serif;
+  float: right;
+  margin-left: 300px;
+  border: 4px solid orange;
+  background-color: red;
+  color: white;
+  padding: 0.5em;
+  width: 100px;
+}
+
+.date .weekday {
+  display: block;
+  font-size: 100%;
+  text-align: center;
+  padding: 0;
+  margin-bottom: 10px;
+}
+
+.date .day {
+  display: block;
+  font-size: 150%;
+  text-align: center;
+  padding: 0;
+  margin-bottom: 8px;
+}
+
+.date .month {
+  display: block;
+  font-size: 100%;
+  text-align: center;
+  padding: 0;
+}
+
+.details {
+  line-height: 1.5;
+}
+
+footer {
+  color: #040;
+  line-height: 1.5;
+}
+
+@media (max-width: 799px) {
+  .layout {
+    width: 100%;
+    box-sizing: border-box;
+  }
+  .date {
+    width: 50px;
+    margin-left: 0;
+  }
+  h1 .button {
+    font-size: 50%;
+  }
+  label {
+    display: block;
+    width: auto;
+  }
+  fieldset .button {
+    display: block;
+    float: none;
+    margin: 0;
+    margin-bottom: 0.2em;
+  }
+  fieldset .button.remove {
+    margin: 0;
+  }
+  .repeat-calendar {
+    margin-left: 0;
+  }
+  form {
+    padding: 0;
+  }
+  input, textarea, select {
+    width: 100%;
+  }
+  fieldset {
+    padding-left: 0;
+  }
+  .repeat-calendar td, th {
+    padding: 3px;
+    width: auto;
+    padding: 3px;
+    border-bottom: 1px dotted #060;
+    width: 3em;
+    text-align: center;
+  }
+}
+

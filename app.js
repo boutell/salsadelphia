@@ -440,7 +440,7 @@ appy.bootstrap({
 
 function ensureAuthenticated(req, res, next) {
   if (req.isAuthenticated()) { return next(); }
-  req.session.afterLogin = req.query.url;
+  req.session.afterLogin = req.url;
   return res.redirect('/auth/facebook');
 }
 

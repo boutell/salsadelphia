@@ -1,4 +1,9 @@
 $(function() {
+
+  $('body').on('click', '[data-confirm]', function() {
+    return confirm('Are you sure?');
+  });
+
   var $form = $('form.new-event');
   $form.find('[name="venue"]').autocomplete({
     source: '/autocomplete-venue',
@@ -51,20 +56,50 @@ $(function() {
   });
 
   $form.find('[name="repeat"]').on('change', ifRepeatShowCalendar);
+  $form.find('[name="repeat"]').on('change', ifDatesChange);
 
   $form.find('th[data-weekday]').on('click', function() {
     var weekday = $(this).attr('data-weekday');
     $form.find('input[data-weekday="' + weekday + '"]').trigger('click');
+    ifDatesChange();
     return false;
   });
 
+  $('.repeat-calendar input').on('click', ifDatesChange);
+
+  var $repeat = $('[name="repeat"]');
+
   ifRepeatShowCalendar();
+  ifDatesChange();
 
   function ifRepeatShowCalendar() {
-    if ($('[name="repeat"]').val()) {
+    if ($repeat.val()) {
       $('.repeat-calendar').show();
     } else {
       $('.repeat-calendar').hide();
     }
+  }
+
+  function ifDatesChange() {
+    var $cancellations = $('.cancellations');
+    $cancellations.find('h4').has('input:checkbox:not(:checked)').remove();
+    $.post('/upcoming', $form.serialize(), function(data) {
+      if (!data.status === 'ok') {
+        return;
+      }
+      $.each(data.dates, function(i, date) {
+        if ($cancellations.find('input[value="' + date.value + '"]').length) {
+          return;
+        }
+        var $h4 = $('<h4></h4>');
+        var $input = $('<input type="checkbox" name="cancellations[]" />');
+        $input.attr('value', date.value);
+        $h4.append($input);
+        var $span = $('<span></span>');
+        $span.text('Cancel ' + date.label);
+        $h4.append($span);
+        $cancellations.append($h4);
+      });
+    });
   }
 });

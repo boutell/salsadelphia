@@ -304,3 +304,22 @@ footer {
   }
 }
 
+.change .button {
+  display: block;
+  text-align: center;
+  margin-bottom: 10px;
+}
+
+.cancellations {
+  display: inline-block;
+  vertical-align: top;
+}
+
+.cancellations input {
+  width: auto;
+  margin-right: 0.5em;
+}
+
+.cancellations h4 {
+  font-size: 90%;
+}

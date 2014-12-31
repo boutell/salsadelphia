@@ -18,6 +18,18 @@ var admin = local.facebook.admin;
 
 RegExp.quote = require('regexp-quote');
 
+var fields = {
+  name: 'string',
+  venue: 'string',
+  address: 'string',
+  date: 'date',
+  time: 'time',
+  repeat: 'boolean',
+  days: 'calendar',
+  details: 'string',
+  cancellations: 'dates'
+};
+
 passport.serializeUser(function(user, done) {
   done(null, user);
 });
@@ -124,10 +136,8 @@ appy.bootstrap({
           return fail(req, res);
         }
 
-        events = _.filter(repeat(events), function(event) {
-          return (event.date >= today);
-        });
-        sort(events);
+        events = filterCanceled(filterFuture(repeatEvents(events), today));
+        sortEvents(events);
 
         var info = locals(req, {
           events: events,
@@ -135,64 +145,6 @@ appy.bootstrap({
         });
         return res.render('index.html', info);
       });
-
-      function repeat(events) {
-        var _events = [];
-        var today = new Date();
-        for (var i = 0; (i <= 31); i++) {
-          var nthDay = new Date(today);
-          nthDay.setDate(today.getDate() + i);
-          var weekday = nthDay.getDay();
-          var nth = Math.floor((nthDay.getDate() - 1) / 7);
-          _.each(events, function(event) {
-            if (!event.repeat) {
-              return;
-            }
-            var _event, m;
-            if (event.days && event.days[nth] && event.days[nth][weekday]) {
-              cloneEvent(event, nthDay);
-              return;
-            }
-            // "Last Tuesday of month" is a special case
-            if (event.days && event.days[5] && event.days[5][weekday]) {
-              // Roll the katamari to the last day of this month
-              var lastDay = new Date(nthDay);
-              lastDay.setDate(1);
-              lastDay.setMonth(lastDay.getMonth() + 1);
-              lastDay.setDate(lastDay.getDate() - 1);
-              var diff = lastDay.getDate() - nthDay.getDate();
-              if (diff < 7) {
-                cloneEvent(event, nthDay);
-                return;
-              }
-            }
-            function cloneEvent(event, today) {
-              var m;
-              _event = _.clone(event);
-              m = moment(today);
-              _event.date = m.format('YYYY-MM-DD');
-              _event.when = moment(_event.date + ' ' + _event.time);
-              _events.push(_event);
-            }
-          });
-        }
-        return _events;
-      }
-
-      function sort(events) {
-        events.sort(function(a, b) {
-          var ac = a.date + ':' + a.venue + ':' + a.time;
-          var bc = b.date + ':' + b.venue + ':' + b.time;
-          if (ac < bc) {
-            return -1;
-          } else if (ac > bc) {
-            return 1;
-          } else {
-            return 0;
-          }
-        });
-      }
-
     });
 
     app.get('/new', ensureAuthenticated, function(req, res) {
@@ -280,6 +232,44 @@ appy.bootstrap({
       });
     });
 
+    app.post('/upcoming', ensureAuthenticated, function(req, res) {
+      var repeat = sanitize.boolean(req.body.repeat);
+      var days = sanitize.calendar(req.body.days);
+      var event = {
+        repeat: repeat,
+        days: days
+      };
+      var events = repeatEvents([ event ]);
+      return res.send({
+        status: 'ok',
+        dates: _.map(_.pluck(events, 'date'), function(date) {
+          return {
+            value: date,
+            label: moment(date).format('ddd MMM Do')
+          };
+        })
+      });
+    });
+
+    app.get('/change', ensureAuthenticated, function(req, res) {
+      var id = sanitize.string(req.query.id);
+      var date = sanitize.date(req.query.date);
+      return appy.events.findOne({ _id: id }, function(err, event) {
+        if (err) {
+          return fail(req, res);
+        }
+        if (!event) {
+          req.flash('message', 'That event has been removed.');
+          return res.redirect('/');
+        }
+        var info = locals(req, {
+          event: event,
+          date: date
+        });
+        return res.render('change.html', info);
+      });
+    });
+
     app.get('/edit', ensureAuthenticated, function(req, res) {
       var now = new Date();
       var today = moment(now).format('YYYY-MM-DD');
@@ -297,6 +287,114 @@ appy.bootstrap({
           action: '/edit?id=' + event._id
         });
         return res.render('edit.html', info);
+      });
+    });
+
+    app.get('/cancel', ensureAuthenticated, function(req, res) {
+      var event;
+      var id = sanitize.string(req.query.id);
+      var date = sanitize.date(req.query.date);
+      var whitelisted = false;
+      return async.series({
+        whitelist: function(callback) {
+          if (admin) {
+            whitelisted = true;
+            return setImmediate(callback);
+          }
+          return appy.whitelist.findOne({ _id: req.user.id }, function(err, _whitelisted) {
+            if (err) {
+              return callback(err);
+            }
+            whitelisted= !!_whitelisted;
+            return callback(null);
+          }, callback);
+        },
+        update: function(callback) {
+          audit({ subject: req.user, verb: 'cancelled', object: id });
+          if (whitelisted) {
+            return appy.events.update({ _id: id }, { $addToSet: { cancellations: date } }, callback);
+          } else {
+            notifyModerator();
+            // Little bit of a hassle, we have to create a draft at
+            // this point if there isn't one already
+            var event;
+            return async.series({
+              get: function(callback) {
+                return appy.events.findOne({ _id: id }, function(err, _event) {
+                  if (err) {
+                    return callback(err);
+                  }
+                  event = _event;
+                  if (!event) {
+                    req.flash('message', 'That event has already been removed.');
+                    return res.redirect('/');
+                  }
+                  return callback(null);
+                });
+              },
+              draft: function(callback) {
+                if (!event.draft) {
+                  event.draft = _.pick(event, _.keys(fields));
+                }
+                event.draft.cancellations = (event.draft.cancellations || []).concat(date);
+                return appy.events.update({ _id: id }, event, callback);
+              }
+            }, callback);
+          }
+        }
+      }, function(err) {
+        if (err) {
+          console.log(err);
+          return fail(req, res);
+        }
+        if (whitelisted) {
+          req.flash('message', 'Thank you!');
+        } else {
+          req.flash('message', 'Thank you! Your edit will be reviewed and approved.');
+        }
+        return res.redirect('/');
+      });
+    });
+
+    app.get('/remove', ensureAuthenticated, function(req, res) {
+      var event;
+      var id = sanitize.string(req.query.id);
+      var date = sanitize.date(req.query.date);
+      var whitelisted = false;
+      return async.series({
+        whitelist: function(callback) {
+          if (admin) {
+            whitelisted = true;
+            return setImmediate(callback);
+          }
+          return appy.whitelist.findOne({ _id: req.user.id }, function(err, _whitelisted) {
+            if (err) {
+              return callback(err);
+            }
+            whitelisted= !!_whitelisted;
+            return callback(null);
+          }, callback);
+        },
+        update: function(callback) {
+          audit({ subject: req.user, verb: 'removed', object: id });
+          if (whitelisted) {
+            return appy.events.remove({ _id: id }, callback);
+          } else {
+            notifyModerator();
+            return appy.events.update({ _id: id }, { $set: { remove: true } }, callback);
+          }
+        }
+      }, function(err) {
+        if (err) {
+          console.log(err);
+          return fail(req, res);
+        }
+        if (whitelisted) {
+          req.flash('message', 'Thank you!');
+        } else {
+          req.flash('message', 'Thank you! Your edit will be reviewed and approved.');
+        }
+        return res.redirect('/');
       });
     });
 
@@ -318,38 +416,28 @@ appy.bootstrap({
             return callback(null);
           }, callback);
         },
-        findOrRemove: function(callback) {
-          if (req.body.remove) {
-            audit({ subject: req.user, verb: 'removed', object: _id });
+        find: function(callback) {
+          return appy.events.findOne({ _id: id }, function(err, _event) {
+            if (err) {
+              return callback(err);
+            }
+            if (!_event) {
+              req.flash('message', 'That event has already been removed.');
+              return res.redirect('/');
+            }
+            event = _event;
             if (whitelisted) {
-              return appy.events.remove({ _id: id }, callback);
+              delete event.draft;
+              sanitizeEvent(req, req.body, event);
             } else {
               notifyModerator();
-              return appy.events.update({ _id: id }, { $set: { remove: true } }, callback);
+              event.draft = event.draft || {};
+              sanitizeEvent(req, req.body, event.draft);
             }
-          } else {
-            return appy.events.findOne({ _id: id }, function(err, _event) {
-              if (err) {
-                return callback(err);
-              }
-              if (!_event) {
-                req.flash('message', 'That event has already been removed.');
-                return res.redirect('/');
-              }
-              event = _event;
-              if (whitelisted) {
-                delete event.draft;
-                sanitizeEvent(req, req.body, event);
-              } else {
-                notifyModerator();
-                event.draft = event.draft || {};
-                sanitizeEvent(req, req.body, event.draft);
-              }
-              audit({ subject: req.user, verb: 'edited', object: event });
-              contribute(req, event);
-              return callback(null);
-            });
-          }
+            audit({ subject: req.user, verb: 'edited', object: event });
+            contribute(req, event);
+            return callback(null);
+          });
         },
         update: function(callback) {
           if (req.body.remove) {
@@ -372,7 +460,6 @@ appy.bootstrap({
     });
 
     app.get('/moderate', ensureAdmin, function(req, res) {
-      console.log('/moderate');
       return appy.events.find({ $or: [ { pending: true }, { draft: { $exists: 1 } }, { remove: true } ] }).sort({ createdAt: 1 }).limit(1).toArray(function(err, events) {
         if (err) {
           return fail(req, res);
@@ -514,7 +601,7 @@ function locals(req, o) {
 function dates() {
   var now = new Date();
   var dates = [];
-  for (i = 0; (i < 32); i++) {
+  for (i = 0; (i < 60); i++) {
     dates.push(new Date(now.getTime() + i * 86400 * 1000));
   }
   return dates;
@@ -532,16 +619,6 @@ function times() {
 };
 
 function sanitizeEvent(req, data, event) {
-  var fields = {
-    name: 'string',
-    venue: 'string',
-    address: 'string',
-    date: 'date',
-    time: 'time',
-    repeat: 'boolean',
-    days: 'calendar',
-    details: 'string',
-  };
 
   _.each(fields, function(type, name) {
     event[name] = sanitize[type](data[name]);
@@ -596,7 +673,79 @@ function notifyModerator() {
     html: '<p>An edit has been made by someone who is not whitelisted yet.'
   }, function(err, info) {
     // That's nice
-    console.log(info);
+    if (err) {
+      console.error(err);
+    } else {
+      console.log(info);
+    }
   });
 }
 
+function repeatEvents(events) {
+  var _events = [];
+  var today = new Date();
+  for (var i = 0; (i <= 60); i++) {
+    var nthDay = new Date(today);
+    nthDay.setDate(today.getDate() + i);
+    var weekday = nthDay.getDay();
+    var nth = Math.floor((nthDay.getDate() - 1) / 7);
+    _.each(events, function(event) {
+      if (!event.repeat) {
+        return;
+      }
+      var _event, m;
+      if (event.days && event.days[nth] && event.days[nth][weekday]) {
+        cloneEvent(event, nthDay);
+        return;
+      }
+      // "Last Tuesday of month" is a special case
+      if (event.days && event.days[5] && event.days[5][weekday]) {
+        // Roll the katamari to the last day of this month
+        var lastDay = new Date(nthDay);
+        lastDay.setDate(1);
+        lastDay.setMonth(lastDay.getMonth() + 1);
+        lastDay.setDate(lastDay.getDate() - 1);
+        var diff = lastDay.getDate() - nthDay.getDate();
+        if (diff < 7) {
+          cloneEvent(event, nthDay);
+          return;
+        }
+      }
+      function cloneEvent(event, today) {
+        var m;
+        _event = _.clone(event);
+        m = moment(today);
+        _event.date = m.format('YYYY-MM-DD');
+        _event.when = moment(_event.date + ' ' + _event.time);
+        _events.push(_event);
+      }
+    });
+  }
+  return _events;
+}
+
+function filterFuture(events, today) {
+  return _.filter(events, function(event) {
+    return (event.date >= today);
+  });
+}
+
+function filterCanceled(events) {
+  return _.filter(events, function(event) {
+    return (!_.contains(event.cancellations || [], event.date));
+  });
+}
+
+function sortEvents(events) {
+  events.sort(function(a, b) {
+    var ac = a.date + ':' + a.venue + ':' + a.time;
+    var bc = b.date + ':' + b.venue + ':' + b.time;
+    if (ac < bc) {
+      return -1;
+    } else if (ac > bc) {
+      return 1;
+    } else {
+      return 0;
+    }
+  });
+}

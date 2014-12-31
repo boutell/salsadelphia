@@ -1,0 +1,10 @@
+{% extends "layout.html" %}
+{% block main %}
+<div class="change">
+  <h3>What do you want to do?</h3>
+  <a data-confirm href="/cancel?id={{ event._id }}&amp;date={{ date }}" class="button cancelled">Cancel this event on {{ date }}</a>
+  <a data-confirm href="/remove?id={{ event._id }}" class="button cancelled">Cancel this event <strong>forever</strong></a>
+  <a href="/edit?id={{ event._id }}" class="button edit">Edit this event</a>
+  <a href="/" class="button cancel">Never mind</a>
+</div>
+{% endblock %}

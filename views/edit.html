@@ -101,12 +101,30 @@
       </table>
     </div>
   </fieldset>
+
+  {% if event._id %}
+    <fieldset>
+      <label>Cancellations</label>
+      <div class="cancellations">
+        {% if event.cancellations %}
+          {% for cancellation in event.cancellations %}
+            <h4><input type="checkbox" name="cancellations[]" checked value="{{ cancellation }}" />Cancel {{ moment(cancellation, 'ddd MMM Do') }}</h4>
+          {% endfor %}
+        {% endif %}
+      </div>
+      {{ original(event, 'cancellations') }}
+    </fieldset>
+  {% endif %}
+
+  </fieldset>
+
   <fieldset>
     <label>Details</label>
     <p class="help"><strong>Cover charge?</strong> Who's teaching? Who's DJing?</p>
     <textarea name="details">{{ event.details | e }}</textarea>
     {{ original(event, 'details', 'textarea') }}
   </fieldset>
+
   <fieldset>
     <a href="#" class="button save">Save Changes</a>
     <a href="/" class="button cancel">never mind</a>

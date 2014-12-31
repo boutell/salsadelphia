@@ -1,6 +1,7 @@
 // Largely borrowed from Apostrophe.
 
 var moment = require('moment');
+var _ = require('lodash');
 
 var sanitize = module.exports = {
   string: function(s, def) {
@@ -65,6 +66,18 @@ var sanitize = module.exports = {
     } catch (e) {
       return returnDefault();
     }
+  },
+
+  dates: function(a) {
+    if (!(a && Array.isArray(a))) {
+      return [];
+    }
+    var result = _.uniq(_.map(a, function(s) {
+      return sanitize.date(s);
+    }));
+    console.log(result);
+    result.sort();
+    return result;
   },
 
   // Given a date object, return a date string in Apostrophe's preferred sortable, comparable, JSON-able format,

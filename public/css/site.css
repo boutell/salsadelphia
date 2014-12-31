@@ -229,8 +229,10 @@ strong {
   display: block;
   font-size: 100%;
   text-align: center;
-  padding: 0;
+  padding: 2;
   margin-bottom: 10px;
+  color: red;
+  background-color: white;
 }
 
 .date .day {

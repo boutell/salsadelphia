@@ -1,9 +1,9 @@
 {% for event in events %}
   <article>
     <div class="date">
-      <span class="weekday">{{ moment(event.when, 'ddd') }}</span>
-      <span class="day">{{ moment(event.when, 'DD') }}</span>
-      <span class="month">{{ moment(event.when, 'MMM') }}</span>
+      <div class="weekday"><span class="inner">{{ moment(event.when, 'ddd') }}</span></div>
+      <div class="day">{{ moment(event.when, 'DD') }}</div>
+      <div class="month">{{ moment(event.when, 'MMM') }}</div>
     </div>
     <h4 class="name">{{ event.name | e }} <a class="button edit" href="/edit?id={{ event._id }}">Edit</a></h3>
     <h4 class="venue">{{ event.venue | e }} </h4>

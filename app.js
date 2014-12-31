@@ -179,9 +179,9 @@ appy.bootstrap({
         events.sort(function(a, b) {
           var ac = a.date + ':' + a.venue + ':' + a.time;
           var bc = b.date + ':' + b.venue + ':' + b.time;
-          if (ac.when < bc.when) {
+          if (ac < bc) {
             return -1;
-          } else if (ac.when > bc.when) {
+          } else if (ac > bc) {
             return 1;
           } else {
             return 0;

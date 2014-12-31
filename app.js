@@ -7,6 +7,10 @@ var passport = require('passport');
 var FacebookStrategy = require('passport-facebook').Strategy;
 var searchify = require('./searchify.js');
 var async = require('async');
+var nodemailer = require('nodemailer');
+var sendmailTransport = require('nodemailer-sendmail-transport');
+
+var mailer = nodemailer.createTransport(sendmailTransport({}));
 
 var local = require('./data/local.js');
 
@@ -233,6 +237,7 @@ appy.bootstrap({
           return res.redirect('/');
         }
         if (event.pending) {
+          notifyModerator();
           req.flash('message', 'Thank you! Your submission will be reviewed first before it appears.');
         } else {
           req.flash('message', 'Thank you!');
@@ -319,6 +324,7 @@ appy.bootstrap({
             if (whitelisted) {
               return appy.events.remove({ _id: id }, callback);
             } else {
+              notifyModerator();
               return appy.events.update({ _id: id }, { $set: { remove: true } }, callback);
             }
           } else {
@@ -335,6 +341,7 @@ appy.bootstrap({
                 delete event.draft;
                 sanitizeEvent(req, req.body, event);
               } else {
+                notifyModerator();
                 event.draft = event.draft || {};
                 sanitizeEvent(req, req.body, event.draft);
               }
@@ -580,3 +587,16 @@ function audit(info) {
     }
   });
 }
+
+function notifyModerator() {
+  return mailer.sendMail({
+    from: 'boutell@boutell.com',
+    to: 'boutell@boutell.com',
+    subject: 'Moderation needed on salsadelphia.com',
+    html: '<p>An edit has been made by someone who is not whitelisted yet.'
+  }, function(err, info) {
+    // That's nice
+    console.log(info);
+  });
+}
+

@@ -75,7 +75,6 @@ var sanitize = module.exports = {
     var result = _.uniq(_.map(a, function(s) {
       return sanitize.date(s);
     }));
-    console.log(result);
     result.sort();
     return result;
   },

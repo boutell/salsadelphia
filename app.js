@@ -89,7 +89,7 @@ appy.bootstrap({
     uri: 'mongodb://localhost:27017/salsadelphia',
 
     // These collections become available as appy.posts, etc.
-    collections: [ 'events', 'whitelist' ]
+    collections: [ 'events', 'whitelist', 'audit' ]
 
     // If I need indexes I specify that collection in more detail:
     // [ { name: 'posts', index: { fields: { { title: 1 } }, unique: true } } ]
@@ -223,6 +223,7 @@ appy.bootstrap({
           }, callback);
         },
         insert: function(callback) {
+          audit({ subject: req.user, verb: 'added', object: event });
           event._id = guid();
           return appy.events.insert(event, callback);
         }
@@ -297,10 +298,29 @@ appy.bootstrap({
     app.post('/edit', ensureAuthenticated, function(req, res) {
       var event;
       var id = sanitize.string(req.query.id);
+      var whitelisted = false;
       return async.series({
+        whitelist: function(callback) {
+          if (admin) {
+            whitelisted = true;
+            return setImmediate(callback);
+          }
+          return appy.whitelist.findOne({ _id: req.user.id }, function(err, _whitelisted) {
+            if (err) {
+              return callback(err);
+            }
+            whitelisted= !!_whitelisted;
+            return callback(null);
+          }, callback);
+        },
         findOrRemove: function(callback) {
           if (req.body.remove) {
-            return appy.events.update({ _id: id }, { $set: { remove: true } }, callback);
+            audit({ subject: req.user, verb: 'removed', object: _id });
+            if (whitelisted) {
+              return appy.events.remove({ _id: id }, callback);
+            } else {
+              return appy.events.update({ _id: id }, { $set: { remove: true } }, callback);
+            }
           } else {
             return appy.events.findOne({ _id: id }, function(err, _event) {
               if (err) {
@@ -311,8 +331,14 @@ appy.bootstrap({
                 return res.redirect('/');
               }
               event = _event;
-              event.draft = event.draft || {};
-              sanitizeEvent(req, req.body, event.draft);
+              if (whitelisted) {
+                delete event.draft;
+                sanitizeEvent(req, req.body, event);
+              } else {
+                event.draft = event.draft || {};
+                sanitizeEvent(req, req.body, event.draft);
+              }
+              audit({ subject: req.user, verb: 'edited', object: event });
               contribute(req, event);
               return callback(null);
             });
@@ -329,7 +355,11 @@ appy.bootstrap({
           console.log(err);
           return fail(req, res);
         }
-        req.flash('message', 'Thank you! Your edit will be reviewed and approved.');
+        if (whitelisted) {
+          req.flash('message', 'Thank you!');
+        } else {
+          req.flash('message', 'Thank you! Your edit will be reviewed and approved.');
+        }
         return res.redirect('/');
       });
     });
@@ -537,4 +567,16 @@ function guid() {
 
 function fail(req, res) {
   return res.render('error.html');
+}
+
+// Keep an audit trail of all edits so we can
+// reconstruct the database if a whitelisted person
+// loses their mind
+
+function audit(info) {
+  return appy.audit.insert(info, function(err) {
+    if (err) {
+      throw 'Audit failed!';
+    }
+  });
 }

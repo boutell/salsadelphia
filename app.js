@@ -177,9 +177,11 @@ appy.bootstrap({
 
       function sort(events) {
         events.sort(function(a, b) {
-          if (a.when < b.when) {
+          var ac = a.date + ':' + a.venue + ':' + a.time;
+          var bc = b.date + ':' + b.venue + ':' + b.time;
+          if (ac.when < bc.when) {
             return -1;
-          } else if (a.when > b.when) {
+          } else if (ac.when > bc.when) {
             return 1;
           } else {
             return 0;
@@ -380,13 +382,13 @@ appy.bootstrap({
           }
         },
         update: function(callback) {
-          if (req.body.reject || req.body.remove) {
+          if (!event) {
             return setImmediate(callback);
           }
           return appy.events.update({ _id: req.query.id }, event, callback);
         },
         whitelist: function(callback) {
-          if (req.body.reject) {
+          if (!event) {
             return setImmediate(callback);
           }
           var ids = _.pluck(event.editors || [], 'id');

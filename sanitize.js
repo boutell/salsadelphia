@@ -149,7 +149,6 @@ var sanitize = module.exports = {
   },
 
   calendar: function(_days) {
-    console.log(_days);
     var days = [];
     var week, weekday;
     for (week = 0; (week <= 5); week++) {

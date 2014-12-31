@@ -684,12 +684,18 @@ function notifyModerator() {
 function repeatEvents(events) {
   var _events = [];
   var today = new Date();
+  _.each(events, function(event) {
+    if (!event.repeat) {
+      _events.push(event);
+    }
+  });
   for (var i = 0; (i <= 60); i++) {
     var nthDay = new Date(today);
     nthDay.setDate(today.getDate() + i);
     var weekday = nthDay.getDay();
     var nth = Math.floor((nthDay.getDate() - 1) / 7);
     _.each(events, function(event) {
+      var m;
       if (!event.repeat) {
         return;
       }

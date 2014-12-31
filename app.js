@@ -140,7 +140,6 @@ appy.bootstrap({
           nthDay.setDate(today.getDate() + i);
           var weekday = nthDay.getDay();
           var nth = Math.floor((nthDay.getDate() - 1) / 7);
-          console.log(weekday + ',' + nth);
           _.each(events, function(event) {
             if (!event.repeat) {
               return;
@@ -311,8 +310,6 @@ appy.bootstrap({
               }
               event = _event;
               event.draft = event.draft || {};
-              console.log('req.body is:');
-              console.log(req.body);
               sanitizeEvent(req, req.body, event.draft);
               contribute(req, event);
               return callback(null);
@@ -336,6 +333,7 @@ appy.bootstrap({
     });
 
     app.get('/moderate', ensureAdmin, function(req, res) {
+      console.log('/moderate');
       return appy.events.find({ $or: [ { pending: true }, { draft: { $exists: 1 } }, { remove: true } ] }).sort({ createdAt: 1 }).limit(1).toArray(function(err, events) {
         if (err) {
           return fail(req, res);

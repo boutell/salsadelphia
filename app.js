@@ -176,7 +176,8 @@ appy.bootstrap({
             } else {
               event.pending = true;
             }
-          }, callback);
+            return callback(null);
+          });
         },
         insert: function(callback) {
           audit({ subject: req.user, verb: 'added', object: event });
@@ -305,9 +306,9 @@ appy.bootstrap({
             if (err) {
               return callback(err);
             }
-            whitelisted= !!_whitelisted;
+            whitelisted = !!_whitelisted;
             return callback(null);
-          }, callback);
+          });
         },
         update: function(callback) {
           audit({ subject: req.user, verb: 'cancelled', object: id });
@@ -371,9 +372,9 @@ appy.bootstrap({
             if (err) {
               return callback(err);
             }
-            whitelisted= !!_whitelisted;
+            whitelisted = !!_whitelisted;
             return callback(null);
-          }, callback);
+          });
         },
         update: function(callback) {
           audit({ subject: req.user, verb: 'removed', object: id });
@@ -412,9 +413,9 @@ appy.bootstrap({
             if (err) {
               return callback(err);
             }
-            whitelisted= !!_whitelisted;
+            whitelisted = !!_whitelisted;
             return callback(null);
-          }, callback);
+          });
         },
         find: function(callback) {
           return appy.events.findOne({ _id: id }, function(err, _event) {

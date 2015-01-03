@@ -163,7 +163,7 @@ appy.bootstrap({
       event.createdAt = new Date();
       return async.series({
         whitelist: function(callback) {
-          if (admin) {
+          if (req.admin) {
             event.active = true;
             return setImmediate(callback);
           }
@@ -297,7 +297,7 @@ appy.bootstrap({
       var whitelisted = false;
       return async.series({
         whitelist: function(callback) {
-          if (admin) {
+          if (req.admin) {
             whitelisted = true;
             return setImmediate(callback);
           }
@@ -363,7 +363,7 @@ appy.bootstrap({
       var whitelisted = false;
       return async.series({
         whitelist: function(callback) {
-          if (admin) {
+          if (req.admin) {
             whitelisted = true;
             return setImmediate(callback);
           }
@@ -404,7 +404,7 @@ appy.bootstrap({
       var whitelisted = false;
       return async.series({
         whitelist: function(callback) {
-          if (admin) {
+          if (req.admin) {
             whitelisted = true;
             return setImmediate(callback);
           }
@@ -563,7 +563,10 @@ appy.bootstrap({
 });
 
 function ensureAuthenticated(req, res, next) {
-  if (req.isAuthenticated()) { return next(); }
+  if (req.isAuthenticated()) {
+    req.admin = (req.user && req.user.id === admin);
+    return next();
+  }
   req.session.afterLogin = req.url;
   return res.redirect('/auth/facebook');
 }

@@ -60,7 +60,7 @@ appy.bootstrap({
       users: {
         admin: {
           username: 'admin',
-          password: 'demo'
+          password: '983yh49hwefuiha'
         }
       }
     }

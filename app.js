@@ -662,6 +662,7 @@ function fail(req, res) {
 // loses their mind
 
 function audit(info) {
+  info.when = new Date();
   return appy.audit.insert(info, function(err) {
     if (err) {
       throw 'Audit failed!';

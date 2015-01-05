@@ -315,7 +315,6 @@ appy.bootstrap({
           if (whitelisted) {
             return appy.events.update({ _id: id }, { $addToSet: { cancellations: date } }, callback);
           } else {
-            notifyModerator();
             // Little bit of a hassle, we have to create a draft at
             // this point if there isn't one already
             var event;
@@ -334,6 +333,7 @@ appy.bootstrap({
                 });
               },
               draft: function(callback) {
+                notifyModerator();
                 if (!event.draft) {
                   event.draft = _.pick(event, _.keys(fields));
                 }

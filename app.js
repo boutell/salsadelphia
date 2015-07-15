@@ -1,4 +1,9 @@
-var appy = require('appy');
+var bodyParser = require('body-parser');
+var expressSession = require('express-session');
+var connectFlash = require('connect-flash');
+var cookieParser = require('cookie-parser');
+var express = require('express');
+var mongodb = require('mongodb');
 var nunjucks = require('nunjucks');
 var moment = require('moment');
 var _ = require('lodash');
@@ -9,14 +14,19 @@ var searchify = require('./searchify.js');
 var async = require('async');
 var nodemailer = require('nodemailer');
 var sendmailTransport = require('nodemailer-sendmail-transport');
-
 var mailer = nodemailer.createTransport(sendmailTransport({}));
 
 var local = require('./data/local.js');
-
 var admin = local.facebook.admin;
 
 RegExp.quote = require('regexp-quote');
+
+var app = express();
+app.use(bodyParser.urlencoded({ extended: true }));
+app.use(bodyParser.json({}));
+app.use(cookieParser());
+app.use(connectFlash());
+app.use(expressSession({ secret: local.sessionSecret, resave: true, saveUninitialized: false }));
 
 var fields = {
   name: 'string',
@@ -51,517 +61,508 @@ passport.use(new FacebookStrategy({
   }
 ));
 
-appy.bootstrap({
-  passport: passport,
-  // Hardcode some users. Will also look for users in the users collection by default
-  auth: {
-    strategy: 'local',
-    options: {
-      users: {
-        admin: {
-          username: 'admin',
-          password: '983yh49hwefuiha'
-        }
-      }
+app.use(passport.initialize());
+
+// Passport sessions remember that the user is logged in
+app.use(passport.session());
+
+app.use(express.static(__dirname + '/public'));
+
+var model = {};
+var collections = [ 'events', 'whitelist', 'audit' ];
+
+var perPage = 50;
+
+var env = nunjucks.configure('views', {
+  express: app
+});
+
+env.addFilter('nlbr', function(s) {
+  return s.replace(/\n/g, '<br />\n');
+});
+
+app.get('/', function(req, res) {
+  var now = new Date();
+  var today = moment(now).format('YYYY-MM-DD');
+
+  return model.events.find({ active: true }).toArray(function(err, events) {
+    if (err) {
+      return fail(req, res);
     }
-  },
-  // An alternative: Twitter auth
-  // auth: {
-  //   strategy: 'twitter',
-  //   options: {
-  //     consumerKey: 'xxxx',
-  //     consumerSecret: 'xxxx',
-  //     callbackURL: 'http://my.example.com:3000/twitter-auth'
-  //   }
-  // },
 
-  // Serve static files
-  static: __dirname + '/public',
+    events = filterCanceled(filterFuture(repeatEvents(events), today));
+    sortEvents(events);
 
-  // Lock all URLs beginning with this prefix to require login. You can lock
-  // an array of prefixes if you wish . Prefixes must be followed by / or . or
-  // be matched exactly. To lock everything except the login mechanism itself,
-  // use locked: true
-  // locked: '/new',
-
-  // If you're using locked: true you can make exceptions here
-  // unlocked: [ '/welcome' ]
-
-  // Choose your own please
-  sessionSecret: 'uiy786ftuybugftguy',
-
-  sessions: {
-    // You can pass options directly to connect-mongo here to customize sessions
-  },
-
-  // Redirects to this host if accessed by another name
-  // (canonicalization). This is pretty hard to undo once
-  // the browser gets the redirect, so use it in production only
-  // host: 'my.example.com:3000',
-
-  // Database configuration
-  db: {
-    // MongoDB URL to connect to
-    uri: 'mongodb://localhost:27017/salsadelphia',
-
-    // These collections become available as appy.posts, etc.
-    collections: [ 'events', 'whitelist', 'audit' ]
-
-    // If I need indexes I specify that collection in more detail:
-    // [ { name: 'posts', index: { fields: { { title: 1 } }, unique: true } } ]
-    // Or more than one index:
-    // [ { name: 'posts', indexes: [ { fields: { { title: 1 } } }, ... ] } ]
-  },
-
-  // This is where your code goes! Add routes, do anything else you want to do,
-  // then call appy.listen
-
-  ready: function(app, db) {
-    var perPage = 50;
-
-    var env = nunjucks.configure('views', {
-      express: app
+    var info = locals(req, {
+      events: events,
+      user: req.user
     });
+    return res.render('index.html', info);
+  });
+});
 
-    env.addFilter('nlbr', function(s) {
-      return s.replace(/\n/g, '<br />\n');
-    });
+app.get('/new', ensureAuthenticated, function(req, res) {
 
-    app.get('/', function(req, res) {
-      var now = new Date();
-      var today = moment(now).format('YYYY-MM-DD');
+  var info = locals(req, { event: {}, action: '/new' });
 
-      return appy.events.find({ active: true }).toArray(function(err, events) {
+  return res.render('edit.html', info);
+
+});
+
+app.post('/new', ensureAuthenticated, function(req, res) {
+
+  var event = {};
+  sanitizeEvent(req, req.body, event);
+  contribute(req, event);
+  event.createdAt = new Date();
+  return async.series({
+    whitelist: function(callback) {
+      if (req.admin) {
+        event.active = true;
+        return setImmediate(callback);
+      }
+      return model.whitelist.findOne({ _id: req.user.id }, function(err, whitelisted) {
         if (err) {
-          return fail(req, res);
+          return callback(err);
         }
-
-        events = filterCanceled(filterFuture(repeatEvents(events), today));
-        sortEvents(events);
-
-        var info = locals(req, {
-          events: events,
-          user: req.user
-        });
-        return res.render('index.html', info);
-      });
-    });
-
-    app.get('/new', ensureAuthenticated, function(req, res) {
-
-      var info = locals(req, { event: {}, action: '/new' });
-
-      return res.render('edit.html', info);
-
-    });
-
-    app.post('/new', ensureAuthenticated, function(req, res) {
-
-      var event = {};
-      sanitizeEvent(req, req.body, event);
-      contribute(req, event);
-      event.createdAt = new Date();
-      return async.series({
-        whitelist: function(callback) {
-          if (req.admin) {
-            event.active = true;
-            return setImmediate(callback);
-          }
-          return appy.whitelist.findOne({ _id: req.user.id }, function(err, whitelisted) {
-            if (err) {
-              return callback(err);
-            }
-            if (whitelisted) {
-              event.active = true;
-            } else {
-              event.pending = true;
-            }
-            return callback(null);
-          });
-        },
-        insert: function(callback) {
-          audit({ subject: req.user, verb: 'added', object: event });
-          event._id = guid();
-          return appy.events.insert(event, callback);
-        }
-      }, function(err) {
-        if (err) {
-          req.flash('message', 'An error occurred. Sorry.');
-          return res.redirect('/');
-        }
-        if (event.pending) {
-          notifyModerator();
-          req.flash('message', 'Thank you! Your submission will be reviewed first before it appears.');
+        if (whitelisted) {
+          event.active = true;
         } else {
-          req.flash('message', 'Thank you!');
+          event.pending = true;
         }
-        return res.redirect('/');
+        return callback(null);
       });
-    });
+    },
+    insert: function(callback) {
+      audit({ subject: req.user, verb: 'added', object: event });
+      event._id = guid();
+      return model.events.insert(event, callback);
+    }
+  }, function(err) {
+    if (err) {
+      req.flash('message', 'An error occurred. Sorry.');
+      return res.redirect('/');
+    }
+    if (event.pending) {
+      notifyModerator();
+      req.flash('message', 'Thank you! Your submission will be reviewed first before it appears.');
+    } else {
+      req.flash('message', 'Thank you!');
+    }
+    return res.redirect('/');
+  });
+});
 
-    app.get('/autocomplete-venue', ensureAuthenticated, function(req, res) {
-      var term = sanitize.string(req.query.term);
-      var re = searchify(term);
-      var q = { venue: re, active: true };
-      return appy.events.find(q).toArray(function(err, events) {
-        if (err) {
-          res.statusCode = 500;
-          return res.send('error');
-        }
-        var seen = {};
-        return res.send(
-          _.map(
-            _.filter(
-              events,
-              function(e) {
-                if (_.has(seen, e.venue)) {
-                  return false;
-                }
-                seen[e.venue] = true;
-                return true;
-              }
-            ),
-            function(e) {
-              return {
-                label: e.venue,
-                value: e.venue,
-                address: e.address
-              };
+app.get('/autocomplete-venue', ensureAuthenticated, function(req, res) {
+  var term = sanitize.string(req.query.term);
+  var re = searchify(term);
+  var q = { venue: re, active: true };
+  return model.events.find(q).toArray(function(err, events) {
+    if (err) {
+      res.statusCode = 500;
+      return res.send('error');
+    }
+    var seen = {};
+    return res.send(
+      _.map(
+        _.filter(
+          events,
+          function(e) {
+            if (_.has(seen, e.venue)) {
+              return false;
             }
-          )
-        );
-      });
-    });
-
-    app.post('/upcoming', ensureAuthenticated, function(req, res) {
-      var repeat = sanitize.boolean(req.body.repeat);
-      var days = sanitize.calendar(req.body.days);
-      var event = {
-        repeat: repeat,
-        days: days
-      };
-      var events = repeatEvents([ event ]);
-      return res.send({
-        status: 'ok',
-        dates: _.map(_.pluck(events, 'date'), function(date) {
+            seen[e.venue] = true;
+            return true;
+          }
+        ),
+        function(e) {
           return {
-            value: date,
-            label: moment(date).format('ddd MMM Do')
+            label: e.venue,
+            value: e.venue,
+            address: e.address
           };
-        })
-      });
-    });
+        }
+      )
+    );
+  });
+});
 
-    app.get('/change', ensureAuthenticated, function(req, res) {
-      var id = sanitize.string(req.query.id);
-      var date = sanitize.date(req.query.date);
-      return appy.events.findOne({ _id: id }, function(err, event) {
+app.post('/upcoming', ensureAuthenticated, function(req, res) {
+  var repeat = sanitize.boolean(req.body.repeat);
+  var days = sanitize.calendar(req.body.days);
+  var event = {
+    repeat: repeat,
+    days: days
+  };
+  var events = repeatEvents([ event ]);
+  return res.send({
+    status: 'ok',
+    dates: _.map(_.pluck(events, 'date'), function(date) {
+      return {
+        value: date,
+        label: moment(date).format('ddd MMM Do')
+      };
+    })
+  });
+});
+
+app.get('/change', ensureAuthenticated, function(req, res) {
+  var id = sanitize.string(req.query.id);
+  var date = sanitize.date(req.query.date);
+  return model.events.findOne({ _id: id }, function(err, event) {
+    if (err) {
+      return fail(req, res);
+    }
+    if (!event) {
+      req.flash('message', 'That event has been removed.');
+      return res.redirect('/');
+    }
+    var info = locals(req, {
+      event: event,
+      date: date
+    });
+    return res.render('change.html', info);
+  });
+});
+
+app.get('/edit', ensureAuthenticated, function(req, res) {
+  var now = new Date();
+  var today = moment(now).format('YYYY-MM-DD');
+  var id = sanitize.string(req.query.id);
+  return model.events.findOne({ _id: id }, function(err, event) {
+    if (err) {
+      return fail(req, res);
+    }
+    if (!event) {
+      req.flash('message', 'That event has been removed.');
+      return res.redirect('/');
+    }
+    var info = locals(req, {
+      event: event,
+      action: '/edit?id=' + event._id
+    });
+    return res.render('edit.html', info);
+  });
+});
+
+app.get('/cancel', ensureAuthenticated, function(req, res) {
+  var event;
+  var id = sanitize.string(req.query.id);
+  var date = sanitize.date(req.query.date);
+  var whitelisted = false;
+  return async.series({
+    whitelist: function(callback) {
+      if (req.admin) {
+        whitelisted = true;
+        return setImmediate(callback);
+      }
+      return model.whitelist.findOne({ _id: req.user.id }, function(err, _whitelisted) {
         if (err) {
-          return fail(req, res);
+          return callback(err);
         }
-        if (!event) {
-          req.flash('message', 'That event has been removed.');
-          return res.redirect('/');
-        }
-        var info = locals(req, {
-          event: event,
-          date: date
-        });
-        return res.render('change.html', info);
+        whitelisted = !!_whitelisted;
+        return callback(null);
       });
-    });
-
-    app.get('/edit', ensureAuthenticated, function(req, res) {
-      var now = new Date();
-      var today = moment(now).format('YYYY-MM-DD');
-      var id = sanitize.string(req.query.id);
-      return appy.events.findOne({ _id: id }, function(err, event) {
-        if (err) {
-          return fail(req, res);
-        }
-        if (!event) {
-          req.flash('message', 'That event has been removed.');
-          return res.redirect('/');
-        }
-        var info = locals(req, {
-          event: event,
-          action: '/edit?id=' + event._id
-        });
-        return res.render('edit.html', info);
-      });
-    });
-
-    app.get('/cancel', ensureAuthenticated, function(req, res) {
-      var event;
-      var id = sanitize.string(req.query.id);
-      var date = sanitize.date(req.query.date);
-      var whitelisted = false;
-      return async.series({
-        whitelist: function(callback) {
-          if (req.admin) {
-            whitelisted = true;
-            return setImmediate(callback);
-          }
-          return appy.whitelist.findOne({ _id: req.user.id }, function(err, _whitelisted) {
-            if (err) {
-              return callback(err);
-            }
-            whitelisted = !!_whitelisted;
-            return callback(null);
-          });
-        },
-        update: function(callback) {
-          audit({ subject: req.user, verb: 'cancelled', object: id });
-          if (whitelisted) {
-            return appy.events.update({ _id: id }, { $addToSet: { cancellations: date } }, callback);
-          } else {
-            // Little bit of a hassle, we have to create a draft at
-            // this point if there isn't one already
-            var event;
-            return async.series({
-              get: function(callback) {
-                return appy.events.findOne({ _id: id }, function(err, _event) {
-                  if (err) {
-                    return callback(err);
-                  }
-                  event = _event;
-                  if (!event) {
-                    req.flash('message', 'That event has already been removed.');
-                    return res.redirect('/');
-                  }
-                  return callback(null);
-                });
-              },
-              draft: function(callback) {
-                notifyModerator();
-                if (!event.draft) {
-                  event.draft = _.pick(event, _.keys(fields));
-                }
-                event.draft.cancellations = (event.draft.cancellations || []).concat(date);
-                return appy.events.update({ _id: id }, event, callback);
-              }
-            }, callback);
-          }
-        }
-      }, function(err) {
-        if (err) {
-          console.log(err);
-          return fail(req, res);
-        }
-        if (whitelisted) {
-          req.flash('message', 'Thank you!');
-        } else {
-          req.flash('message', 'Thank you! Your edit will be reviewed and approved.');
-        }
-        return res.redirect('/');
-      });
-    });
-
-    app.get('/remove', ensureAuthenticated, function(req, res) {
-      var event;
-      var id = sanitize.string(req.query.id);
-      var date = sanitize.date(req.query.date);
-      var whitelisted = false;
-      return async.series({
-        whitelist: function(callback) {
-          if (req.admin) {
-            whitelisted = true;
-            return setImmediate(callback);
-          }
-          return appy.whitelist.findOne({ _id: req.user.id }, function(err, _whitelisted) {
-            if (err) {
-              return callback(err);
-            }
-            whitelisted = !!_whitelisted;
-            return callback(null);
-          });
-        },
-        update: function(callback) {
-          audit({ subject: req.user, verb: 'removed', object: id });
-          if (whitelisted) {
-            return appy.events.remove({ _id: id }, callback);
-          } else {
-            notifyModerator();
-            return appy.events.update({ _id: id }, { $set: { remove: true } }, callback);
-          }
-        }
-      }, function(err) {
-        if (err) {
-          console.log(err);
-          return fail(req, res);
-        }
-        if (whitelisted) {
-          req.flash('message', 'Thank you!');
-        } else {
-          req.flash('message', 'Thank you! Your edit will be reviewed and approved.');
-        }
-        return res.redirect('/');
-      });
-    });
-
-    app.post('/edit', ensureAuthenticated, function(req, res) {
-      var event;
-      var id = sanitize.string(req.query.id);
-      var whitelisted = false;
-      return async.series({
-        whitelist: function(callback) {
-          if (req.admin) {
-            whitelisted = true;
-            return setImmediate(callback);
-          }
-          return appy.whitelist.findOne({ _id: req.user.id }, function(err, _whitelisted) {
-            if (err) {
-              return callback(err);
-            }
-            whitelisted = !!_whitelisted;
-            return callback(null);
-          });
-        },
-        find: function(callback) {
-          return appy.events.findOne({ _id: id }, function(err, _event) {
-            if (err) {
-              return callback(err);
-            }
-            if (!_event) {
-              req.flash('message', 'That event has already been removed.');
-              return res.redirect('/');
-            }
-            event = _event;
-            if (whitelisted) {
-              delete event.draft;
-              sanitizeEvent(req, req.body, event);
-            } else {
-              notifyModerator();
-              event.draft = event.draft || {};
-              sanitizeEvent(req, req.body, event.draft);
-            }
-            audit({ subject: req.user, verb: 'edited', object: event });
-            contribute(req, event);
-            return callback(null);
-          });
-        },
-        update: function(callback) {
-          if (req.body.remove) {
-            return setImmediate(callback);
-          }
-          return appy.events.update({ _id: id }, event, callback);
-        }
-      }, function(err) {
-        if (err) {
-          console.log(err);
-          return fail(req, res);
-        }
-        if (whitelisted) {
-          req.flash('message', 'Thank you!');
-        } else {
-          req.flash('message', 'Thank you! Your edit will be reviewed and approved.');
-        }
-        return res.redirect('/');
-      });
-    });
-
-    app.get('/moderate', ensureAdmin, function(req, res) {
-      return appy.events.find({ $or: [ { pending: true }, { draft: { $exists: 1 } }, { remove: true } ] }).sort({ createdAt: 1 }).limit(1).toArray(function(err, events) {
-        if (err) {
-          return fail(req, res);
-        }
-        if (!events.length) {
-          req.flash('message', 'All caught up!');
-          return res.redirect('/');
-        }
-        var info = locals(req, {
-          event: events[0],
-          action: '/moderate?id=' + events[0]._id,
-          moderating: true
-        });
-        if (info.event.draft) {
-          info.event.original = _.omit(info.event, 'draft');
-          _.extend(info.event, info.event.draft);
-          delete info.event.draft;
-        }
-        return res.render('edit.html', info);
-      });
-    });
-
-    app.post('/moderate', ensureAdmin, function(req, res) {
-      var event;
-      return async.series({
-        findRejectOrRemove: function(callback) {
-          if (req.body.reject) {
-            return appy.events.update({ _id: req.query.id }, { $unset: { draft: 1, remove: 1 } }, callback);
-          } else if (req.body.remove) {
-            return appy.events.remove({ _id: req.query.id }, callback);
-          } else {
-            return appy.events.findOne({ _id: req.query.id }, function(err, _event) {
+    },
+    update: function(callback) {
+      audit({ subject: req.user, verb: 'cancelled', object: id });
+      if (whitelisted) {
+        return model.events.update({ _id: id }, { $addToSet: { cancellations: date } }, callback);
+      } else {
+        // Little bit of a hassle, we have to create a draft at
+        // this point if there isn't one already
+        var event;
+        return async.series({
+          get: function(callback) {
+            return model.events.findOne({ _id: id }, function(err, _event) {
               if (err) {
                 return callback(err);
               }
               event = _event;
-              sanitizeEvent(req, req.body, _event);
-              delete event.pending;
-              delete event.draft;
-              delete event.remove;
-              event.active = true;
+              if (!event) {
+                req.flash('message', 'That event has already been removed.');
+                return res.redirect('/');
+              }
               return callback(null);
             });
+          },
+          draft: function(callback) {
+            notifyModerator();
+            if (!event.draft) {
+              event.draft = _.pick(event, _.keys(fields));
+            }
+            event.draft.cancellations = (event.draft.cancellations || []).concat(date);
+            return model.events.update({ _id: id }, event, callback);
           }
-        },
-        update: function(callback) {
-          if (!event) {
-            return setImmediate(callback);
-          }
-          return appy.events.update({ _id: req.query.id }, event, callback);
-        },
-        whitelist: function(callback) {
-          if (!event) {
-            return setImmediate(callback);
-          }
-          var ids = _.pluck(event.editors || [], 'id');
-          return async.eachSeries(ids, function(item, callback) {
-            return appy.whitelist.update({ _id: item }, { _id: item }, { upsert: true }, callback);
-          }, callback);
-        }
-      }, function(err) {
+        }, callback);
+      }
+    }
+  }, function(err) {
+    if (err) {
+      console.log(err);
+      return fail(req, res);
+    }
+    if (whitelisted) {
+      req.flash('message', 'Thank you!');
+    } else {
+      req.flash('message', 'Thank you! Your edit will be reviewed and approved.');
+    }
+    return res.redirect('/');
+  });
+});
+
+app.get('/remove', ensureAuthenticated, function(req, res) {
+  var event;
+  var id = sanitize.string(req.query.id);
+  var date = sanitize.date(req.query.date);
+  var whitelisted = false;
+  return async.series({
+    whitelist: function(callback) {
+      if (req.admin) {
+        whitelisted = true;
+        return setImmediate(callback);
+      }
+      return model.whitelist.findOne({ _id: req.user.id }, function(err, _whitelisted) {
         if (err) {
-          return fail(req, res);
+          return callback(err);
         }
-        // Go get another to moderate
-        return res.redirect('/moderate');
+        whitelisted = !!_whitelisted;
+        return callback(null);
       });
-    });
+    },
+    update: function(callback) {
+      audit({ subject: req.user, verb: 'removed', object: id });
+      if (whitelisted) {
+        return model.events.remove({ _id: id }, callback);
+      } else {
+        notifyModerator();
+        return model.events.update({ _id: id }, { $set: { remove: true } }, callback);
+      }
+    }
+  }, function(err) {
+    if (err) {
+      console.log(err);
+      return fail(req, res);
+    }
+    if (whitelisted) {
+      req.flash('message', 'Thank you!');
+    } else {
+      req.flash('message', 'Thank you! Your edit will be reviewed and approved.');
+    }
+    return res.redirect('/');
+  });
+});
 
-    // GET /auth/facebook
-    //   Use passport.authenticate() as route middleware to authenticate the
-    //   request.  The first step in Facebook authentication will involve
-    //   redirecting the user to facebook.com.  After authorization, Facebook will
-    //   redirect the user back to this application at /auth/facebook/callback
-    app.get('/auth/facebook',
-      passport.authenticate('facebook'),
-      function(req, res) {
-        // The request will be redirected to Facebook for authentication, so this
-        // function will not be called.
-    });
-
-    // GET /auth/facebook/callback
-    //   Use passport.authenticate() as route middleware to authenticate the
-    //   request.  If authentication fails, the user will be redirected back to the
-    //   login page.  Otherwise, the primary route function function will be called,
-    //   which, in this example, will redirect the user to the home page.
-    app.get('/auth/facebook/callback',
-      passport.authenticate('facebook', { failureRedirect: '/login' }),
-      function(req, res) {
-        var after = req.session.afterLogin;
-        if (after) {
-          delete req.session.afterLogin;
-          return res.redirect(after);
+app.post('/edit', ensureAuthenticated, function(req, res) {
+  var event;
+  var id = sanitize.string(req.query.id);
+  var whitelisted = false;
+  return async.series({
+    whitelist: function(callback) {
+      if (req.admin) {
+        whitelisted = true;
+        return setImmediate(callback);
+      }
+      return model.whitelist.findOne({ _id: req.user.id }, function(err, _whitelisted) {
+        if (err) {
+          return callback(err);
         }
-        return res.redirect('/');
+        whitelisted = !!_whitelisted;
+        return callback(null);
+      });
+    },
+    find: function(callback) {
+      return model.events.findOne({ _id: id }, function(err, _event) {
+        if (err) {
+          return callback(err);
+        }
+        if (!_event) {
+          req.flash('message', 'That event has already been removed.');
+          return res.redirect('/');
+        }
+        event = _event;
+        if (whitelisted) {
+          delete event.draft;
+          sanitizeEvent(req, req.body, event);
+        } else {
+          notifyModerator();
+          event.draft = event.draft || {};
+          sanitizeEvent(req, req.body, event.draft);
+        }
+        audit({ subject: req.user, verb: 'edited', object: event });
+        contribute(req, event);
+        return callback(null);
+      });
+    },
+    update: function(callback) {
+      if (req.body.remove) {
+        return setImmediate(callback);
+      }
+      return model.events.update({ _id: id }, event, callback);
+    }
+  }, function(err) {
+    if (err) {
+      console.log(err);
+      return fail(req, res);
+    }
+    if (whitelisted) {
+      req.flash('message', 'Thank you!');
+    } else {
+      req.flash('message', 'Thank you! Your edit will be reviewed and approved.');
+    }
+    return res.redirect('/');
+  });
+});
+
+app.get('/moderate', ensureAdmin, function(req, res) {
+  return model.events.find({ $or: [ { pending: true }, { draft: { $exists: 1 } }, { remove: true } ] }).sort({ createdAt: 1 }).limit(1).toArray(function(err, events) {
+    if (err) {
+      return fail(req, res);
+    }
+    if (!events.length) {
+      req.flash('message', 'All caught up!');
+      return res.redirect('/');
+    }
+    var info = locals(req, {
+      event: events[0],
+      action: '/moderate?id=' + events[0]._id,
+      moderating: true
+    });
+    if (info.event.draft) {
+      info.event.original = _.omit(info.event, 'draft');
+      _.extend(info.event, info.event.draft);
+      delete info.event.draft;
+    }
+    return res.render('edit.html', info);
+  });
+});
+
+app.post('/moderate', ensureAdmin, function(req, res) {
+  var event;
+  return async.series({
+    findRejectOrRemove: function(callback) {
+      if (req.body.reject) {
+        return model.events.update({ _id: req.query.id }, { $unset: { draft: 1, remove: 1 } }, callback);
+      } else if (req.body.remove) {
+        return model.events.remove({ _id: req.query.id }, callback);
+      } else {
+        return model.events.findOne({ _id: req.query.id }, function(err, _event) {
+          if (err) {
+            return callback(err);
+          }
+          event = _event;
+          sanitizeEvent(req, req.body, _event);
+          delete event.pending;
+          delete event.draft;
+          delete event.remove;
+          event.active = true;
+          return callback(null);
+        });
+      }
+    },
+    update: function(callback) {
+      if (!event) {
+        return setImmediate(callback);
+      }
+      return model.events.update({ _id: req.query.id }, event, callback);
+    },
+    whitelist: function(callback) {
+      if (!event) {
+        return setImmediate(callback);
+      }
+      var ids = _.pluck(event.editors || [], 'id');
+      return async.eachSeries(ids, function(item, callback) {
+        return model.whitelist.update({ _id: item }, { _id: item }, { upsert: true }, callback);
+      }, callback);
+    }
+  }, function(err) {
+    if (err) {
+      return fail(req, res);
+    }
+    // Go get another to moderate
+    return res.redirect('/moderate');
+  });
+});
+
+// GET /auth/facebook
+//   Use passport.authenticate() as route middleware to authenticate the
+//   request.  The first step in Facebook authentication will involve
+//   redirecting the user to facebook.com.  After authorization, Facebook will
+//   redirect the user back to this application at /auth/facebook/callback
+app.get('/auth/facebook',
+  passport.authenticate('facebook'),
+  function(req, res) {
+    // The request will be redirected to Facebook for authentication, so this
+    // function will not be called.
+});
+
+// GET /auth/facebook/callback
+//   Use passport.authenticate() as route middleware to authenticate the
+//   request.  If authentication fails, the user will be redirected back to the
+//   login page.  Otherwise, the primary route function function will be called,
+//   which, in this example, will redirect the user to the home page.
+app.get('/auth/facebook/callback',
+  passport.authenticate('facebook', { failureRedirect: '/login' }),
+  function(req, res) {
+    var after = req.session.afterLogin;
+    if (after) {
+      delete req.session.afterLogin;
+      return res.redirect(after);
+    }
+    return res.redirect('/');
+  }
+);
+
+return async.series({
+  modelConnect: function(callback) {
+    return mongodb.MongoClient.connect(
+      local.db || 'mongodb://localhost:27017/salsadelphia',
+      function(err, dbArg) {
+        if (err) {
+          return callback(err);
+        }
+        model.db = dbArg;
+        return callback(null);
       }
     );
-
-    appy.listen();
+  },
+  modelCollections: function(callback) {
+    return async.eachSeries(collections, function(item, callback) {
+      return model.db.collection(item, function(err, collection) {
+        if (err) {
+          return callback(err);
+        }
+        model[item] = collection;
+        return callback(null);
+      });
+    }, callback);
   }
+}, function(err) {
+  if (err) {
+    console.error('database connection error:');
+    console.error(err);
+    process.exit(1);
+  }
+  listen();
 });
+
+function listen() {
+  var port = 3000;
+  try {
+    port = parseInt(fs.readFileSync('data/port'));
+  } catch (e) {
+    console.log('no port file, defaulting to port 3000');
+  }
+
+  return app.listen(port, function(err) {
+    if (err) {
+      console.error('Oops, port ' + port + ' not available. Are you running another app?');
+      process.exit(1);
+    } else {
+      console.log('Listening on port ' + port + '.');
+    }
+  });
+}
 
 function ensureAuthenticated(req, res, next) {
   if (req.isAuthenticated()) {
@@ -663,7 +664,7 @@ function fail(req, res) {
 
 function audit(info) {
   info.when = new Date();
-  return appy.audit.insert(info, function(err) {
+  return model.audit.insert(info, function(err) {
     if (err) {
       throw 'Audit failed!';
     }

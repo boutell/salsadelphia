@@ -18,12 +18,12 @@
     {% if message and message.length %}
       <h2>{{ message | e }}</h2>
     {% endif %}
+    <header>
+      Salsadelphia is maintained by volunteers. Please take advantage of the "edit" and "add event" buttons. If a club is closed, let the rest of us know. Got questions about the site? Contact <a href="mailto:tommybgoode@gmail.com">Tom Boutell</a>. ¡Baila salsa!
+    </header>
     <main>
       {% block main %}{% endblock %}
     </main>
-    <footer>
-      Salsadelphia is maintained by volunteers. Please take advantage of the "edit" and "add event" buttons. If a club is closed, let the rest of us know. Got questions about the site? Contact <a href="mailto:tommybgoode@gmail.com">Tom Boutell</a>. ¡Baila salsa!
-    </footer>
     <script src="//ajax.googleapis.com/ajax/libs/jquery/1.11.2/jquery.min.js"></script>
     <script src="//ajax.googleapis.com/ajax/libs/jqueryui/1.11.2/jquery-ui.min.js"></script>
     <script src="/js/site.js"></script>

@@ -115,6 +115,7 @@ app.post('/new', ensureAuthenticated, function(req, res) {
   sanitizeEvent(req, req.body, event);
   contribute(req, event);
   event.createdAt = new Date();
+
   return async.series({
     whitelist: function(callback) {
       if (req.admin) {

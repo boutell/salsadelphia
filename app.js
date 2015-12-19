@@ -14,8 +14,8 @@ var searchify = require('./searchify.js');
 var async = require('async');
 var nodemailer = require('nodemailer');
 var sendmailTransport = require('nodemailer-sendmail-transport');
+var fs = require('fs');
 var mailer = nodemailer.createTransport(sendmailTransport({}));
-
 var local = require('./data/local.js');
 var admin = local.facebook.admin;
 
@@ -642,8 +642,6 @@ function contribute(req, event) {
 
 var guidSource;
 var guidBuffer;
-
-var fs = require('fs');
 
 // Our "guids" are just 16 digits of random hex
 function guid() {

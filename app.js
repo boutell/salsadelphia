@@ -28,6 +28,11 @@ app.use(cookieParser());
 app.use(connectFlash());
 app.use(expressSession({ secret: local.sessionSecret, resave: true, saveUninitialized: false }));
 
+// app.use(function(req, res, next) {
+//   console.log(req.url);
+//   return next();
+// });
+
 var fields = {
   name: 'string',
   venue: 'string',
@@ -570,7 +575,9 @@ function ensureAuthenticated(req, res, next) {
     req.admin = (req.user && req.user.id === admin);
     return next();
   }
-  req.session.afterLogin = req.url;
+  if (req.method === 'GET') {
+    req.session.afterLogin = req.url;
+  }
   return res.redirect('/auth/facebook');
 }
 
@@ -581,7 +588,7 @@ function ensureAdmin(req, res, next) {
     }
     return res.redirect('/');
   }
-  req.session.afterLogin = req.query.url;
+  req.session.afterLogin = req.url;
   return res.redirect('/auth/facebook');
 }
 

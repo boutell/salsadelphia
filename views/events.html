@@ -1,5 +1,6 @@
 {% for event in events %}
-  <article>
+  {% set date = moment(event.when, 'YYYY-MM-DD') %}
+  <article class="{% if lastDate and (date != lastDate) %}new-date{% endif %}">
     <div class="date">
       <div class="weekday"><span class="inner">{{ moment(event.when, 'ddd') }}</span></div>
       <div class="day">{{ moment(event.when, 'DD') }}</div>
@@ -10,4 +11,5 @@
     <h5 class="address"><a href="https://www.google.com/maps/place/{{ event.address | urlencode | e }}">{{ event.address | e }}</a></h5>
     <div class="details">{{ event.details | e | nlbr }}</div>
   </article>
+  {% set lastDate = date %}
 {% endfor %}

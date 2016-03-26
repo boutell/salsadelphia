@@ -78,7 +78,7 @@ var collections = [ 'events', 'whitelist', 'audit' ];
 
 var perPage = 50;
 
-var env = nunjucks.configure('views', {
+var env = nunjucks.configure(__dirname + '/views', {
   express: app
 });
 
@@ -555,7 +555,7 @@ return async.series({
 function listen() {
   var port = 3000;
   try {
-    port = parseInt(fs.readFileSync('data/port'));
+    port = parseInt(fs.readFileSync(__dirname + '/data/port'));
   } catch (e) {
     console.log('no port file, defaulting to port 3000');
   }
